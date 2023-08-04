@@ -583,8 +583,45 @@ public class Layout
     void DeterminePositions(ItemRef itemRef, LayoutVec2 pos)
     {
         Item item = items[itemRef];
-        LayoutVec2 childPos = pos;
         ItemRef childRef = item.firstChild;
+        LayoutVec2 childPos = new LayoutVec2();
+        switch(item.flags.Allignment)
+        {
+            case 1:
+                while(childRef != -1)
+                {
+                    Item child = items[childRef];
+                    childPos.x += (LayoutNumber)(child.finalRect.z + child.margin.x + child.margin.z);
+                    childPos.y += (LayoutNumber)(child.finalRect.w + child.margin.y + child.margin.w);
+                    childRef = child.nextSibling;
+                }
+                childPos.x = (LayoutNumber)(item.finalRect.z/2 - childPos.x/2);
+                childPos.y = (LayoutNumber)(item.finalRect.w/2 - childPos.y/2);
+                break;
+            //end
+            case 2:
+            while(childRef != -1)
+                {
+                    Item child = items[childRef];
+                    childPos.x += (LayoutNumber)(child.finalRect.z + child.margin.x + child.margin.z);
+                    childPos.y += (LayoutNumber)(child.finalRect.w + child.margin.y + child.margin.w);
+                    childRef = child.nextSibling;
+                }
+                childPos.x = (LayoutNumber)(item.finalRect.z - childPos.x);
+                childPos.y = (LayoutNumber)(item.finalRect.w - childPos.y);
+                break;
+        }
+        if(item.flags.StackDirection == 0)
+        {
+            childPos.y = 0;
+        }
+        else
+        {
+            childPos.x = 0;
+        }
+        childPos.x += pos.x;
+        childPos.y += pos.y;
+        childRef = item.firstChild;
         while(childRef != -1)
         {
             Item child = items[childRef];

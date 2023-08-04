@@ -10,7 +10,8 @@ public static class Program
     static readonly LayoutVec4 margin = new LayoutVec4(10, 10, 10, 10);
     public static void Main()
     {
-        Raylib.SetConfigFlags(ConfigFlags.FLAG_VSYNC_HINT | ConfigFlags.FLAG_WINDOW_RESIZABLE);
+        Raylib.SetConfigFlags(ConfigFlags.FLAG_WINDOW_RESIZABLE);
+        Raylib.SetTargetFPS(60);
         Raylib.InitWindow(800, 600, "testing Layout");
         //Step one: build the tree
         Layout l = new Layout();
@@ -56,6 +57,7 @@ public static class Program
         flags.StackDirection = 1;
         flags.Fill = 0;
         flags.Expand = 1;
+        flags.Allignment = 1;
         ItemRef firstChildOfTheRootNode = l.CreateChild(0);
         l.SetItemFlags(firstChildOfTheRootNode, flags);
         l.SetItemMinSize(firstChildOfTheRootNode, size);
@@ -64,6 +66,7 @@ public static class Program
         flags.StackDirection = 0;
         flags.Fill = 1;
         flags.Expand = 1;
+        flags.Allignment = 0;
         ItemRef secondChildOfTheRootNode = l.CreateSibling(firstChildOfTheRootNode);
         l.SetItemFlags(secondChildOfTheRootNode, flags);
         l.SetItemMinSize(secondChildOfTheRootNode, size);
