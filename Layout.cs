@@ -629,8 +629,37 @@ public class Layout
                 (LayoutNumber)(child.margin.x + child.margin.z),
                 (LayoutNumber)(child.margin.y + child.margin.w)
             );
+            LayoutVec2 childRealPos;
+            childRealPos = new LayoutVec2(
+                (LayoutNumber)(childPos.x + child.margin.x),
+                (LayoutNumber)(childPos.y + child.margin.y)
+            );
             //set the child's position
-            LayoutVec2 childRealPos = new LayoutVec2((LayoutNumber)(childPos.x + child.margin.x), (LayoutNumber)(childPos.y + child.margin.y));
+            switch(child.flags.PerpendicularAllignment)
+            {
+                //center
+                case 1:
+                    if(item.flags.StackDirection == 0)
+                    {
+                        childRealPos.y = (LayoutNumber)(childPos.y + item.finalRect.w/2 - child.finalRect.w/2);
+                    }
+                    else
+                    {
+                        childRealPos.x = (LayoutNumber)(childPos.x + item.finalRect.z/2 - child.finalRect.z/2);
+                    }
+                    break;
+                //end
+                case 2:
+                    if(item.flags.StackDirection == 0)
+                    {
+                        childRealPos.y = (LayoutNumber)(childPos.y + item.finalRect.w - child.finalRect.w - child.margin.w);
+                    }
+                    else
+                    {
+                        childRealPos.x = (LayoutNumber)(childPos.x + item.finalRect.z - child.finalRect.z - child.margin.z);
+                    }
+                    break;
+            }
             child.finalRect.x = childRealPos.x;
             child.finalRect.y = childRealPos.y;
             items[childRef] = child;
