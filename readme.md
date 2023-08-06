@@ -11,5 +11,7 @@ use Program.cs as an example to get it set up.
 # Features that aren't done
 - Wrap
 - Max size
-- Layout.t doesn't have this, but storing custom data using the Layout.cs API instead of mapping item references to their data would be nice
+- min size isn't applied to expanding items and items within fill containers
+- Layout.h doesn't have this, but storing custom data using the Layout.cs API instead of mapping item references to their data would be nice
 - A complete test of every feature
+- actual proper documentation

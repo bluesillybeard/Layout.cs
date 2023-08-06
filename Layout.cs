@@ -2,9 +2,13 @@
 // I was originally going to directly port it to C#,
 // but it has a lot of strangeness and C stuff that I don't like.
 // So, I made my own version.
+
+
+// This code is not well made.
+// TODO: make this not a big mess
+// These are configurable to your liking.
 using LayoutNumber = System.Int16;
 using ItemRef = System.Int32;
-using System.Security.Cryptography;
 
 public struct LayoutVec2
 {
@@ -133,7 +137,6 @@ struct Item
 
 }
 
-//TODO: test
 public class Layout
 {
     //This is a sparse list - 

@@ -32,7 +32,6 @@ public static class Program
         Random r = new Random(item);
         if(item == -1)return;
         LayoutVec4 rect = l.GetItemFinalRect(item);
-        //int + int = int. So why is short + short = int? Following that logic, int + int = long. But in C# that is not the case. why. WHY.
         Color color = new Color(r.Next() & 255, r.Next() & 255, r.Next() & 255, 255);
         Raylib.DrawRectangle(rect.x, rect.y, rect.z, rect.w, color);
         DrawItemRecursively(l.GetItemNextSibling(item), l);
