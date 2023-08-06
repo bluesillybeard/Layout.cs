@@ -1,9 +1,6 @@
-﻿using System.Diagnostics;
-using ItemRef = System.Int32;
-
+﻿using ItemRef = System.Int32;
 
 using Raylib_CsLo;
-using System.Runtime.InteropServices;
 
 public static class Program
 {
