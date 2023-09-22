@@ -524,6 +524,7 @@ public class LayoutManager
         item.finalRect = new LayoutVec4(0, 0, size.x, size.y);
     }
 
+    // This puts the sizes into the items final rects
     void DetermineSizes(Item item, LayoutVec2 maxSize)
     {
         //Figure out the children's sizes
@@ -605,87 +606,100 @@ public class LayoutManager
         }
     }
 
-    //Note: does not handle the case when allignment is zero.
-    LayoutNumber CalculateAllignmentOffset(Item item, uint stackDirection, uint allignment, uint wrap)
+    static LayoutNumber CalculateAllignmentOffset(Item item, uint stackDirection, uint allignment, uint wrap)
     {
+        //An allignment of begin just means we start from 0.
+        if(allignment == 0)return 0;
         //First, figure out how wide our set of elements is going to be
         LayoutNumber itemSize = item.finalRect[stackDirection+2];
         //summate the sizes of the children in the stack direction
         LayoutNumber sumOfChildSizes = TotalItemSizes(item.firstChild, stackDirection, out var outerMarginTotal);
         if(wrap == 1)
         {
-            sumOfChildSizes = LayoutNumber.Min(sumOfChildSizes, (LayoutNumber)(itemSize + outerMarginTotal));
+            sumOfChildSizes = LayoutNumber.Min(sumOfChildSizes, (LayoutNumber)(itemSize - outerMarginTotal));
         }
 
-        
         //If we are centering, then we need to do one last thing
         if(allignment == 1)
         {
             itemSize/=2; sumOfChildSizes/=2;
         }
-        return (LayoutNumber)(sumOfChildSizes - itemSize);
+        return (LayoutNumber)(itemSize - sumOfChildSizes);
     }
     //like DetermineSizes, this determines the positions of the children of the item
     // given its position
-    void DeterminePositions(Item item, LayoutVec2 pos)
+    void DeterminePositions(Item parent, LayoutVec2 pos)
     {
-        //The is the second writing of this function.
-        //First, use the allignment to figure out where to start placing the children
+        // This is the third writing of this function.
+        // Hopefully I'll figure it out at some point.
 
-        //If the allignment is begin, then don't waste time on deteremining an offset since it will just be zero.
-        LayoutVec2 placePos = pos;
-        var stackDirection = item.flags.StackDirection;
-        var allignment = item.flags.Allignment;
-        LayoutNumber allignmentOffset = 0;
-        if(allignment != 0)
-        {
-            allignmentOffset = CalculateAllignmentOffset(item, stackDirection, allignment, item.flags.Wrap);
-        }
-        placePos[stackDirection] += allignmentOffset;
-        // Go through every child
-        var child = item.firstChild;
+        // First, we need to calculate the offset where the children will start being placed
+        var stackDirection = parent.flags.StackDirection;
+        var allignment = parent.flags.Allignment;
+        var wrap = parent.flags.Wrap;
+        var allignmentOffset = CalculateAllignmentOffset(parent, stackDirection, allignment, wrap);
+
+        //start where the parent begins
+        var childrenStartPosWorldSpace = pos;
+
+        //add the allignment offset
+        childrenStartPosWorldSpace[stackDirection] += allignmentOffset;
+
+        //calculate some properties of the parent
+        LayoutVec2 parentMarginTotal = new(
+            (LayoutNumber)(parent.margin.x + parent.margin.z),
+            (LayoutNumber)(parent.margin.y + parent.margin.w)
+        );
+        LayoutVec2 parentSizePlusMargin = new(
+            (LayoutNumber) (parent.finalRect.z + parentMarginTotal.x),
+            (LayoutNumber) (parent.finalRect.w + parentMarginTotal.y)
+        );
+
+        // First, position all the children
+        // pointer includes only the last item's margins, and is in world space.
+        var pointer = childrenStartPosWorldSpace;
+        var child = parent.firstChild;
         while(child != null)
         {
-            // the position of the child is already in placePos.
-            // The loop actually determines the position of the next item.
             LayoutVec2 childMarginTotal = new(
                 (LayoutNumber)(child.margin.x + child.margin.z),
                 (LayoutNumber)(child.margin.y + child.margin.w)
             );
-            LayoutVec2 childRealPos;
-            childRealPos = new(
-                (LayoutNumber)(placePos.x + child.margin.x),
-                (LayoutNumber)(placePos.y + child.margin.y)
+            LayoutVec2 childSizePlusMargin = new(
+                (LayoutNumber) (child.finalRect.z + childMarginTotal.x),
+                (LayoutNumber) (child.finalRect.w + childMarginTotal.y)
             );
-            //set the child's position
+            LayoutVec2 childPlacePos = pointer;
+            childPlacePos.x += child.margin.x;
+            childPlacePos.y += child.margin.y;
+            //child's perpendicular allignment.
             var XOrYOther = 1 - stackDirection;
             var ZOrWOther = 3 - stackDirection;
             switch(child.flags.PerpendicularAllignment)
             {
                 //center
                 case 1:
-                    childRealPos[XOrYOther] = (LayoutNumber)(placePos[XOrYOther] + item.finalRect[ZOrWOther]/2 - child.finalRect[ZOrWOther]/2);
+                    childPlacePos[XOrYOther] += (LayoutNumber)((parent.finalRect[ZOrWOther] - child.finalRect[ZOrWOther])/2);
                     break;
                 //end
                 case 2:
-                    childRealPos[XOrYOther] = (LayoutNumber)(placePos[XOrYOther] + item.finalRect[ZOrWOther] - child.finalRect[ZOrWOther] - child.margin[ZOrWOther]);
+                    childPlacePos[XOrYOther] += (LayoutNumber)(parent.finalRect[ZOrWOther] - child.finalRect[ZOrWOther]);
                     break;
             }
-            child.finalRect.x = childRealPos.x;
-            child.finalRect.y = childRealPos.y;
-            DeterminePositions(child, childRealPos);
-            if(child.nextSibling != null)
+            //move the pointer
+            pointer[stackDirection] += childSizePlusMargin[stackDirection];
+            if(wrap == 1 && 
+            // If the child is going to go outside of the parent
+            pointer[stackDirection] + childSizePlusMargin[stackDirection] > childrenStartPosWorldSpace[stackDirection] + parent.finalRect[stackDirection+2] - parentMarginTotal[stackDirection])
             {
-                //determine the position of the next one
-                placePos[stackDirection] += (LayoutNumber)(child.finalRect[stackDirection+2] + childMarginTotal[stackDirection]);
-                var nextItem = child.nextSibling;
-                // If it's going to go outside this container and wrap is enabled put it on the next line.
-                if(item.flags.Wrap == 1 && placePos[stackDirection] > pos[stackDirection] + item.finalRect[stackDirection + 2] - nextItem.margin[stackDirection] - nextItem.margin[stackDirection+2] - nextItem.finalRect[stackDirection+2])
-                {
-                    placePos[XOrYOther] += (LayoutNumber)(child.finalRect[ZOrWOther] + childMarginTotal[XOrYOther]);
-                    placePos[stackDirection] = (LayoutNumber)(pos[stackDirection] + allignmentOffset);
-                }
+                pointer[stackDirection] = childrenStartPosWorldSpace[stackDirection];
+                pointer[XOrYOther] += childSizePlusMargin[XOrYOther];
             }
+            // actually place the child and recurse
+            child.finalRect.x = childPlacePos.x;
+            child.finalRect.y = childPlacePos.y;
+            DeterminePositions(child, childPlacePos);
+            
             child = child.nextSibling;
         }
     }
