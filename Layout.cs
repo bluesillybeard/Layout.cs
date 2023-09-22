@@ -38,10 +38,6 @@ public struct LayoutVec2
             // Because C# has no struct-like arrays.
             // And for performance, I want to follow as few references
             // and allocate as few objects as possible.
-            // I suppose I could use an explicit packing order
-            // and then index from the address of the struct
-            // Like one may do in C, but that sounds pretty awful.
-            // The layout.h this was inspired from did use arrays, because C is capable of such insanity.
             if(i==0)
             {
                 x = value;
@@ -70,18 +66,14 @@ public struct LayoutVec4
         //0=x, 1=y, 2=z, 3=w
         readonly get
         {
-            switch(i)
+            return i switch
             {
-                case 0:
-                    return x;
-                case 1:
-                    return y;
-                case 2:
-                    return z;
+                0 => x,
+                1 => y,
+                2 => z,
                 //technically this means anythig >3 is w, but that shouldn't be a problem.
-                default:
-                    return w;
-            }
+                _ => w,
+            };
         }
         set
         {
@@ -249,79 +241,6 @@ public class LayoutManager
         AddSibling(item, i);
         return i;
     }
-
-    // public void SetItemFlags(Item Item, ItemFlags flags)
-    // {
-    //     Item item = items[Item];
-    //     item.flags = flags;
-    //     items[Item] = item;
-    // }
-    // public void SetItemMinSize(Item Item, LayoutVec2 minSize)
-    // {
-    //     Item item = items[Item];
-    //     item.minSize = minSize;
-    //     items[Item] = item;
-    // }
-    // public void SetItemMaxSize(Item Item, LayoutVec2 maxSize)
-    // {
-    //     Item item = items[Item];
-    //     item.maxSize = maxSize;
-    //     items[Item] = item;
-    // }
-    // public void SetItemMargin(Item Item, LayoutVec4 margin)
-    // {
-    //     Item item = items[Item];
-    //     item.margin = margin;
-    //     items[Item] = item;
-    // }
-    // public void SetItem(Item Item, ItemFlags flags, LayoutVec2 minSize, LayoutVec2 maxSize, LayoutVec4 margin)
-    // {
-    //     Item item = items[Item];
-    //     item.flags = flags;
-    //     item.minSize = minSize;
-    //     item.maxSize = maxSize;
-    //     item.margin = margin;
-    //     items[Item] = item;
-    // }
-
-    // public ItemFlags GetItemFlags(Item item)
-    // {
-    //     return items[item].flags;
-    // }
-    // public Item GetItemParent(Item item)
-    // {
-    //     return items[item].parent;
-    // }
-
-    // public Item GetItemFirstChild(Item item)
-    // {
-    //     return items[item].firstChild;
-    // }
-    // public Item GetItemNextSibling(Item item)
-    // {
-    //     return items[item].nextSibling;
-    // }
-    // public Item GetItemPreviousSibling(Item item)
-    // {
-    //     return items[item].previousSibling;
-    // }
-
-    // public LayoutVec2 GetItemMinSize(Item item)
-    // {
-    //     return items[item].minSize;
-    // }
-    // public LayoutVec2 GetItemMaxSize(Item item)
-    // {
-    //     return items[item].maxSize;
-    // }
-    // public LayoutVec4 GetItemFinalRect(Item item)
-    // {
-    //     return items[item].finalRect;
-    // }
-    // public LayoutVec4 GetItemMargin(Item item)
-    // {
-    //     return items[item].margin;
-    // }
     //removes an item and its entire subtree.
     public void Remove(Item item)
     {
@@ -396,7 +315,7 @@ public class LayoutManager
         AddSibling(parent.firstChild, newChild);
     }
 
-    void AddSibling(Item item, Item newSibling)
+    private static void AddSibling(Item item, Item newSibling)
     {
         Item iteration = item;
         for(;;)
@@ -432,13 +351,14 @@ public class LayoutManager
     // because the maxSize and wrap parameters will make the DetermineSizes function a lot more complex
     void DetermineSizeMinimums(Item item)
     {
+        var stackDirection = item.flags.StackDirection;
         //iterate the tree recursively depth first
         if(item.firstChild != null)
             DetermineSizeMinimums(item.firstChild);
         if(item.nextSibling != null)
             DetermineSizeMinimums(item.nextSibling);
         
-        LayoutVec2 size = new LayoutVec2();
+        LayoutVec2 size = new();
         //If there are no children, then the minimum size is super simple
         if(item.firstChild == null)
         {
@@ -447,51 +367,26 @@ public class LayoutManager
         //Non-wrapping
         else if(item.flags.Wrap == 0)
         {
-            //TODO: there has to be a way to deduplicate this code in a useful way
             //add the sizes of the children
-            if(item.flags.StackDirection == 0)
+            // total item sizes in the stacking direction,
+            // find the largest element in the perpendicular direction
+            Item? iterator = item.firstChild;
+            while(iterator != null)
             {
-                //horizontal stack direction
-                // total item sizes in the stacking direction,
-                // find the largest element in the perpendicular direction
-                Item? iterator = item.firstChild;
-                while(iterator != null)
+                //the item's "min size" is what's defined by the user of the library.
+                // the min size we need to use here is the calculated min size,
+                // which was conveniently written to the finalRect when the children were iterated.
+                // But, we also add the margin to that size, since the container also contains its childrens margins
+                LayoutVec2 itemMinSize = new(
+                     (LayoutNumber)(iterator.finalRect.z + iterator.margin.x + iterator.margin.z),
+                     (LayoutNumber)(iterator.finalRect.w + iterator.margin.y + iterator.margin.w)
+                );
+                size[stackDirection] += itemMinSize[stackDirection];
+                if(itemMinSize[1 - stackDirection] > size[1 - stackDirection])
                 {
-                    //the item's "min size" is what's defined by the user of the library.
-                    // the min size we need to use here is the calculated min size,
-                    // which was conveniently written to the finalRect when the children were iterated.
-                    // But, we also add the margin to that size, since the container also contains its childrens margins
-                    LayoutNumber itemMinSizeX = (LayoutNumber)(iterator.finalRect.z + iterator.margin.x + iterator.margin.z);
-                    LayoutNumber itemMinSizeY = (LayoutNumber)(iterator.finalRect.w + iterator.margin.y + iterator.margin.w);
-                    size.x += itemMinSizeX;
-                    if(itemMinSizeY > size.y)
-                    {
-                        size.y = itemMinSizeY;
-                    }
-                    iterator = iterator.nextSibling;
+                    size[1 - stackDirection] = itemMinSize[1 - stackDirection];
                 }
-            }
-            else
-            {
-                //vertial stack direction
-                // total item sizes in the stacking direction,
-                // find the largest element in the perpendicular direction
-                Item? iterator = item.firstChild;
-                while(iterator != null)
-                {
-                    //the item's "min size" is what's defined by the user of the library.
-                    // the min size we need to use here is the calculated min size,
-                    // which was conveniently written to the finalRect when the children were iterated.
-                    // But, we also add the margin to that size, since the container also contains its childrens margins
-                    LayoutNumber itemMinSizeX = (LayoutNumber)(iterator.finalRect.z + iterator.margin.x + iterator.margin.z);
-                    LayoutNumber itemMinSizeY = (LayoutNumber)(iterator.finalRect.w + iterator.margin.y + iterator.margin.w);
-                    size.y += itemMinSizeY;
-                    if(itemMinSizeX > size.x)
-                    {
-                        size.x = itemMinSizeX;
-                    }
-                    iterator = iterator.nextSibling;
-                }
+                iterator = iterator.nextSibling;
             }
         }
         else
@@ -518,6 +413,15 @@ public class LayoutManager
                 }
                 iterator = iterator.nextSibling;
             }
+        }
+        // If the item has an explicit minimum size, and it's larger than the calculated one, use that instead
+        if(size.x < item.minSize.x)
+        {
+            size.x = item.minSize.x;
+        }
+        if(size.y < item.minSize.y)
+        {
+            size.y = item.minSize.y;
         }
         //set the "final" rect output to be our final size
         // This will be used in the final determineSizes function later.

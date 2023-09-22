@@ -7,6 +7,7 @@ public static class Program
     {
         BuildUI1,
         BuildUI2,
+        BuildUIMainMenu,
 
     };
     public static void Main()
@@ -245,5 +246,30 @@ public static class Program
             Wrap = 1,
         }, size, margin);
         AddElements(verticalEnd, l);
+    }
+
+    static void BuildUIMainMenu(LayoutManager l)
+    {
+        Raylib.SetWindowTitle("Testing Layout - Main Menu");
+        LayoutVec2 buttonSize = new(300, 100);
+        LayoutVec4 buttonMargins = new(10, 10, 10, 10);
+        l.Clear();
+
+        l.root.flags = new(){
+            StackDirection = 1,
+            Allignment = 1,
+        };
+
+        l.CreateChild(l.root, 
+        new (){
+            PerpendicularAllignment = 1,
+            Allignment = 1,
+        }, buttonSize, buttonMargins);
+
+        l.CreateChild(l.root, 
+        new(){
+            Allignment = 1,
+            PerpendicularAllignment = 1,
+        }, buttonSize, buttonMargins);
     }
 }
