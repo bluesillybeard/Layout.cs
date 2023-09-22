@@ -633,6 +633,7 @@ public class LayoutManager
         // This is the third writing of this function.
         // Hopefully I'll figure it out at some point.
 
+        //TODO: if the allignment is end, start from the end and stack backwards
         // First, we need to calculate the offset where the children will start being placed
         var stackDirection = parent.flags.StackDirection;
         var allignment = parent.flags.Allignment;
