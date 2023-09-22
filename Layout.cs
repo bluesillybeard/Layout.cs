@@ -1,3 +1,5 @@
+namespace Layout;
+
 //inspired by a C header: https://github.com/randrew/layout
 // I was originally going to directly port it to C#,
 // but it has a lot of strangeness and C stuff that I don't like.
@@ -7,11 +9,7 @@
 // This code is not well made.
 // TODO: make this not a big mess
 // These are configurable to your liking.
-using LayoutNumber = System.Int16;
-using ItemRef = System.Int32;
-using System.Globalization;
-using System.Timers;
-using Microsoft.VisualBasic;
+using LayoutNumber = Int16;
 
 public struct LayoutVec2
 {
@@ -31,7 +29,7 @@ public struct LayoutVec2
     {
         //0 -> horizontal
         //1 -> vertical
-        get {
+        readonly get {
             return i==0 ? x : y;
         }
         set
@@ -70,7 +68,7 @@ public struct LayoutVec4
     public LayoutNumber this[uint i]
     {
         //0=x, 1=y, 2=z, 3=w
-        get
+        readonly get
         {
             switch(i)
             {
@@ -140,328 +138,275 @@ public struct ItemFlags
     const uint Vertical = 1;
     ///<summary>0->horizontal, 1->vertical</summary>
     public uint StackDirection {
-        get { return (uint)(flags & SDM) >> SDL; }
+        readonly get { return (uint)(flags & SDM) >> SDL; }
         set { flags = (uint)(flags & ~SDM | (value << SDL) & SDM); }
     }
     ///<summary>0->start, 1->center, 2->end</summary>
     public uint Allignment {
-        get { return (uint)(flags & AM) >> AL; }
+        readonly get { return (uint)(flags & AM) >> AL; }
         set { flags = (uint)(flags & ~AM | (value << AL) & AM); }
     }
     ///<summary>0->no wrap, 1->wrap</summary>
     public uint Wrap {
-        get { return (uint)(flags & WM) >> WL; }
+        readonly get { return (uint)(flags & WM) >> WL; }
         set { flags = (uint)(flags & ~WM | (value << WL) & WM); }
     }
     ///<summary>0->no fill, 1->fill</summary>
     public uint Fill {
-        get { return (uint)(flags & FM) >> FL; }
+        readonly get { return (uint)(flags & FM) >> FL; }
         set { flags = (uint)(flags & ~FM | (value << FL) & FM); }
     }
     ///<summary>0->no expand, 1->expand</summary>
     public uint Expand {
-        get { return (uint)(flags & EM) >> EL; }
+        readonly get { return (uint)(flags & EM) >> EL; }
         set { flags = (uint)(flags & ~EM | (value << EL) & EM); }
     }
     ///<summary>0->start, 1->center, 2->end</summary>
     public uint PerpendicularAllignment {
-        get { return (uint)(flags & PAM) >> PAL; }
+        readonly get { return (uint)(flags & PAM) >> PAL; }
         set { flags = (uint)(flags & ~PAM | (value << PAL) & PAM); }
     }
     ///<summary>0->no break, 1->break</summary>
     public uint Break {
-        get { return (uint)(flags & BM) >> BL; }
+        readonly get { return (uint)(flags & BM) >> BL; }
         set { flags = (uint)(flags & ~BM | (value << BL) & BM); }
     }
     ///<summary>0->not in tree, 1->in tree</summary>
     public uint InTree {
-        get { return (uint)(flags & NRM) >> NRL; }
+        readonly get { return (uint)(flags & NRM) >> NRL; }
         set { flags = (uint)(flags & ~NRM | (value << NRL) & NRM); }
     }
 
 }
-struct Item
+public class Item
 {
     public Item()
     {
         flags = new ItemFlags();
-        parent = -1;
-        firstChild = -1;
-        nextSibling = -1;
-        previousSibling = -1;
+        parent = null;
+        firstChild = null;
+        nextSibling = null;
+        previousSibling = null;
         minSize = new LayoutVec2();
         maxSize = new LayoutVec2();
         finalRect = new LayoutVec4();
         margin = new LayoutVec4();
     }
     public ItemFlags flags;
-    public ItemRef parent;
-    public ItemRef firstChild;
-    public ItemRef nextSibling;
-    public ItemRef previousSibling;
+    public Item? parent;
+    public Item? firstChild;
+    public Item? nextSibling;
+    public Item? previousSibling;
     public LayoutVec2 minSize;
     public LayoutVec2 maxSize;
     //x=left, y=top, z=width, w=height,
     public LayoutVec4 finalRect;
     //x=left, y=top, z=right, w=bottom
     public LayoutVec4 margin;
-
 }
 
-public class Layout
+public class LayoutManager
 {
-    //This is a sparse list - 
-    // Some items are initialized and valid,
-    // but they are considered empty.
-    // empty items are held in a separate list.
-    //Items are referenced by their index in the list,
-    // and the index must stay the same, so items that are removed are simply marked as empty.
-    List<Item> items;
-    Stack<ItemRef> clearItems;
-
-    public Layout(int initialCapacity)
+    public Item root;
+    public LayoutManager()
     {
-        items = new List<Item>(initialCapacity);
-        clearItems = new Stack<ItemRef>(initialCapacity);
-    }
-    public Layout()
-    {
-        items = new List<Item>();
-        clearItems = new Stack<ItemRef>();
-        InitRoot();
+        root = InitItemInTree();
     }
 
-    private void InitRoot()
+    private static Item InitItemInTree()
     {
-        Item root = new Item();
+        Item item = new();
         //The default value for InTree is false.
-        root.flags.InTree = 1;
-        items.Add(root);
+        item.flags.InTree = 1;
+        return item;
     }
 
     //methods that build the layout
-    public ItemRef CreateChild(ItemRef parent)
+    public Item CreateChild(Item parent)
     {
-        if(!clearItems.TryPop(out ItemRef child))
-        {
-            child = (ItemRef)items.Count;
-            items.Add(new Item());
-        }
-        AddChild(parent, child);
-        Item item = new();
-        item.flags.InTree = 1;
-        items[child] = item;
-        return child;
+        Item i = new();
+        i.flags.InTree = 1;
+        AddChild(parent, i);
+        return i;
     }
 
-    public ItemRef CreateChild(ItemRef parent, ItemFlags flags, LayoutVec2 minSize, LayoutVec4 margins)
+    public Item CreateChild(Item parent, ItemFlags flags, LayoutVec2 minSize, LayoutVec4 margins)
     {
-        if(!clearItems.TryPop(out ItemRef child))
-        {
-            child = (ItemRef)items.Count;
-            items.Add(new Item());
-        }
-        AddChild(parent, child);
-        Item item = new()
-        {
+        Item i = new(){
             flags = flags,
             minSize = minSize,
             margin = margins,
         };
-        item.flags.InTree = 1;
-        items[child] = item;
-        return child;
+        i.flags.InTree = 1;
+        AddChild(parent, i);
+        return i;
     }
 
-    public ItemRef CreateSibling(ItemRef item)
+    public Item CreateSibling(Item item)
     {
-        if(!clearItems.TryPop(out ItemRef sibling))
-        {
-            sibling = (ItemRef)items.Count;
-            items.Add(new Item());
-        }
-        AddSibling(items[item].parent, item, sibling);
-        Item itemItem = new Item();
-        itemItem.flags.InTree = 1;
-        items[sibling] = itemItem;
-        return sibling;
+        Item i = new();
+        i.flags.InTree = 1;
+        AddSibling(item, i);
+        return i;
     }
 
-    public void SetItemFlags(ItemRef itemRef, ItemFlags flags)
-    {
-        Item item = items[itemRef];
-        item.flags = flags;
-        items[itemRef] = item;
-    }
-    public void SetItemMinSize(ItemRef itemRef, LayoutVec2 minSize)
-    {
-        Item item = items[itemRef];
-        item.minSize = minSize;
-        items[itemRef] = item;
-    }
-    public void SetItemMaxSize(ItemRef itemRef, LayoutVec2 maxSize)
-    {
-        Item item = items[itemRef];
-        item.maxSize = maxSize;
-        items[itemRef] = item;
-    }
-    public void SetItemMargin(ItemRef itemRef, LayoutVec4 margin)
-    {
-        Item item = items[itemRef];
-        item.margin = margin;
-        items[itemRef] = item;
-    }
-    public void SetItem(ItemRef itemRef, ItemFlags flags, LayoutVec2 minSize, LayoutVec2 maxSize, LayoutVec4 margin)
-    {
-        Item item = items[itemRef];
-        item.flags = flags;
-        item.minSize = minSize;
-        item.maxSize = maxSize;
-        item.margin = margin;
-        items[itemRef] = item;
-    }
+    // public void SetItemFlags(Item Item, ItemFlags flags)
+    // {
+    //     Item item = items[Item];
+    //     item.flags = flags;
+    //     items[Item] = item;
+    // }
+    // public void SetItemMinSize(Item Item, LayoutVec2 minSize)
+    // {
+    //     Item item = items[Item];
+    //     item.minSize = minSize;
+    //     items[Item] = item;
+    // }
+    // public void SetItemMaxSize(Item Item, LayoutVec2 maxSize)
+    // {
+    //     Item item = items[Item];
+    //     item.maxSize = maxSize;
+    //     items[Item] = item;
+    // }
+    // public void SetItemMargin(Item Item, LayoutVec4 margin)
+    // {
+    //     Item item = items[Item];
+    //     item.margin = margin;
+    //     items[Item] = item;
+    // }
+    // public void SetItem(Item Item, ItemFlags flags, LayoutVec2 minSize, LayoutVec2 maxSize, LayoutVec4 margin)
+    // {
+    //     Item item = items[Item];
+    //     item.flags = flags;
+    //     item.minSize = minSize;
+    //     item.maxSize = maxSize;
+    //     item.margin = margin;
+    //     items[Item] = item;
+    // }
 
-    public ItemFlags GetItemFlags(ItemRef item)
-    {
-        return items[item].flags;
-    }
-    public ItemRef GetItemParent(ItemRef item)
-    {
-        return items[item].parent;
-    }
+    // public ItemFlags GetItemFlags(Item item)
+    // {
+    //     return items[item].flags;
+    // }
+    // public Item GetItemParent(Item item)
+    // {
+    //     return items[item].parent;
+    // }
 
-    public ItemRef GetItemFirstChild(ItemRef item)
-    {
-        return items[item].firstChild;
-    }
-    public ItemRef GetItemNextSibling(ItemRef item)
-    {
-        return items[item].nextSibling;
-    }
-    public ItemRef GetItemPreviousSibling(ItemRef item)
-    {
-        return items[item].previousSibling;
-    }
+    // public Item GetItemFirstChild(Item item)
+    // {
+    //     return items[item].firstChild;
+    // }
+    // public Item GetItemNextSibling(Item item)
+    // {
+    //     return items[item].nextSibling;
+    // }
+    // public Item GetItemPreviousSibling(Item item)
+    // {
+    //     return items[item].previousSibling;
+    // }
 
-    public LayoutVec2 GetItemMinSize(ItemRef item)
-    {
-        return items[item].minSize;
-    }
-    public LayoutVec2 GetItemMaxSize(ItemRef item)
-    {
-        return items[item].maxSize;
-    }
-    public LayoutVec4 GetItemFinalRect(ItemRef item)
-    {
-        return items[item].finalRect;
-    }
-    public LayoutVec4 GetItemMargin(ItemRef item)
-    {
-        return items[item].margin;
-    }
+    // public LayoutVec2 GetItemMinSize(Item item)
+    // {
+    //     return items[item].minSize;
+    // }
+    // public LayoutVec2 GetItemMaxSize(Item item)
+    // {
+    //     return items[item].maxSize;
+    // }
+    // public LayoutVec4 GetItemFinalRect(Item item)
+    // {
+    //     return items[item].finalRect;
+    // }
+    // public LayoutVec4 GetItemMargin(Item item)
+    // {
+    //     return items[item].margin;
+    // }
     //removes an item and its entire subtree.
-    public void Remove(ItemRef item)
+    public void Remove(Item item)
     {
-        if(item == 0)
+        if(item == root)
             throw new Exception("Cannot remove the root node!");
-        Item itemItem = items[item];
         // This recursive function doesn't actually remove anything,
         // it just marks all of the tree as being removed.
-        if(itemItem.firstChild != -1)
-            RemoveInternal(itemItem.firstChild);
+        if(item.firstChild != null)
+            RemoveInternal(item.firstChild);
         //Unlike the internal remove function,
         // this one has to actually remove references
         // and set the tree back to being valid
-        Item parentItem = items[itemItem.parent];
-        if(parentItem.firstChild == item)
+        if(item.parent == null)
+            throw new Exception("non-root item's parent is null - this SHOULD NOT happen");
+        Item parent = item.parent;
+        if(parent.firstChild == item)
         {
             // this is the first child
-            parentItem.firstChild = itemItem.nextSibling;
-            if(itemItem.nextSibling != -1)
+            parent.firstChild = item.nextSibling;
+            if(item.nextSibling != null)
             {
                 //this does have a sibling
-                Item sibling = items[itemItem.nextSibling];
-                sibling.previousSibling = -1;
-                items[itemItem.nextSibling] = sibling;
+                Item sibling = item.nextSibling;
+                sibling.previousSibling = null;
             }
-            items[itemItem.parent] = parentItem;
         }
         else
         {
             //we aren't the first child
-            Item previousSibling = items[itemItem.previousSibling];
-            previousSibling.nextSibling = itemItem.nextSibling;
-            if(itemItem.nextSibling != -1)
+            if(item.previousSibling == null)
+                throw new Exception("non first sibling item's previous item is null - this shouldn't happen!");
+            Item previousSibling = item.previousSibling;
+            
+            previousSibling.nextSibling = item.nextSibling;
+            if(item.nextSibling != null)
             {
                 // this isn't the last one
-                Item nextSibling = items[itemItem.nextSibling];
-                nextSibling.previousSibling = itemItem.previousSibling;
-                items[itemItem.nextSibling] = nextSibling;
+                Item nextSibling = item.nextSibling;
+                nextSibling.previousSibling = item.previousSibling;
             }
-            items[itemItem.previousSibling] = previousSibling;
         }
-        markAsRemoved(itemItem, item);
+        MarkAsRemoved(item);
     }
     public void Clear()
     {
-        items.Clear();
-        clearItems.Clear();
-        InitRoot();
+        root = InitItemInTree();
     }
-    void RemoveInternal(ItemRef item)
+    void RemoveInternal(Item item)
     {
-        Item itemItem = items[item];
         //First, remove the child (depth first)
-        if(itemItem.firstChild != -1)
-            RemoveInternal(itemItem.firstChild);
+        if(item.firstChild != null)
+            RemoveInternal(item.firstChild);
         //We also need to remove this nodes siblings.
-        if(itemItem.nextSibling != -1)
-            RemoveInternal(itemItem.nextSibling);
-        markAsRemoved(itemItem, item);
-        // Removing references from this is not required
-        // because all of its siblings are being removed anyway,
-        // and the parent has already removed its reference to this node.
-        // clearing the data is also not required since that's done when an item is created.
+        if(item.nextSibling != null)
+            RemoveInternal(item.nextSibling);
+        MarkAsRemoved(item);
     }
 
-    void markAsRemoved(Item item, ItemRef itemRef)
+    static void MarkAsRemoved(Item item)
     {
         //if this is the last item, just shrink the list
-        if(itemRef == items.Count-1)
-        {
-            items.RemoveAt(itemRef);
-            return;
-        }
         item.flags.InTree = 0;
-        items[itemRef] = item;
-        clearItems.Push(itemRef);
     }
 
-    void AddChild(ItemRef parent, ItemRef newChild)
+    void AddChild(Item parent, Item newChild)
     {
-        Item parentItem = items[parent];
-        if(parentItem.firstChild == -1)
+        if(parent.firstChild == null)
         {
-            parentItem.firstChild = newChild;
-            items[parent] = parentItem;
+            parent.firstChild = newChild;
             return;
         }
-        AddSibling(parent, parentItem.firstChild, newChild);
+        AddSibling(parent.firstChild, newChild);
     }
 
-    void AddSibling(ItemRef parent, ItemRef item, ItemRef newSibling)
+    void AddSibling(Item item, Item newSibling)
     {
-        ItemRef iteration = item;
+        Item iteration = item;
         for(;;)
         {
-            Item iterationItem = items[iteration];
-            if(iterationItem.nextSibling == -1)
+            if(iteration.nextSibling == null)
             {
-                iterationItem.nextSibling = newSibling;
-                items[iteration] = iterationItem;
+                iteration.nextSibling = newSibling;
                 return;
             }
-            iteration = iterationItem.nextSibling;
+            iteration = iteration.nextSibling;
         }
     }
     //when the items are iterated:
@@ -472,33 +417,30 @@ public class Layout
     // and determines every elements bounds
     public void DetermineLayout(LayoutVec2 windowSize)
     {
-        DetermineSizeMinimums(0);
+        DetermineSizeMinimums(root);
         //DetermineSizes only works on the item's children,
         // So we also need to do the root node
-        Item root = items[0];
         root.finalRect.z = windowSize.x;
         root.finalRect.w = windowSize.y;
-        items[0] = root;
-        DetermineSizes(0, windowSize);
-        DeterminePositions(0, new LayoutVec2(0, 0));
+        DetermineSizes(root, windowSize);
+        DeterminePositions(root, new LayoutVec2(0, 0));
     }
 
     //This only figures out the smallest size that the children must be.
     //TODO: I might be able to incorperate this function into the DetermineSizes function,
     // Only do that AFTER they are both complete however
     // because the maxSize and wrap parameters will make the DetermineSizes function a lot more complex
-    void DetermineSizeMinimums(ItemRef itemRef)
+    void DetermineSizeMinimums(Item item)
     {
-        Item item = items[itemRef];
         //iterate the tree recursively depth first
-        if(item.firstChild != -1)
+        if(item.firstChild != null)
             DetermineSizeMinimums(item.firstChild);
-        if(item.nextSibling != -1)
+        if(item.nextSibling != null)
             DetermineSizeMinimums(item.nextSibling);
         
         LayoutVec2 size = new LayoutVec2();
         //If there are no children, then the minimum size is super simple
-        if(item.firstChild == -1)
+        if(item.firstChild == null)
         {
             size = item.minSize;
         }
@@ -512,22 +454,21 @@ public class Layout
                 //horizontal stack direction
                 // total item sizes in the stacking direction,
                 // find the largest element in the perpendicular direction
-                ItemRef iterator = item.firstChild;
-                while(iterator != -1)
+                Item? iterator = item.firstChild;
+                while(iterator != null)
                 {
-                    Item iteratorItem = items[iterator];
                     //the item's "min size" is what's defined by the user of the library.
                     // the min size we need to use here is the calculated min size,
                     // which was conveniently written to the finalRect when the children were iterated.
                     // But, we also add the margin to that size, since the container also contains its childrens margins
-                    LayoutNumber itemMinSizeX = (LayoutNumber)(iteratorItem.finalRect.z + iteratorItem.margin.x + iteratorItem.margin.z);
-                    LayoutNumber itemMinSizeY = (LayoutNumber)(iteratorItem.finalRect.w + iteratorItem.margin.y + iteratorItem.margin.w);
+                    LayoutNumber itemMinSizeX = (LayoutNumber)(iterator.finalRect.z + iterator.margin.x + iterator.margin.z);
+                    LayoutNumber itemMinSizeY = (LayoutNumber)(iterator.finalRect.w + iterator.margin.y + iterator.margin.w);
                     size.x += itemMinSizeX;
                     if(itemMinSizeY > size.y)
                     {
                         size.y = itemMinSizeY;
                     }
-                    iterator = iteratorItem.nextSibling;
+                    iterator = iterator.nextSibling;
                 }
             }
             else
@@ -535,22 +476,21 @@ public class Layout
                 //vertial stack direction
                 // total item sizes in the stacking direction,
                 // find the largest element in the perpendicular direction
-                ItemRef iterator = item.firstChild;
-                while(iterator != -1)
+                Item? iterator = item.firstChild;
+                while(iterator != null)
                 {
-                    Item iteratorItem = items[iterator];
                     //the item's "min size" is what's defined by the user of the library.
                     // the min size we need to use here is the calculated min size,
                     // which was conveniently written to the finalRect when the children were iterated.
                     // But, we also add the margin to that size, since the container also contains its childrens margins
-                    LayoutNumber itemMinSizeX = (LayoutNumber)(iteratorItem.finalRect.z + iteratorItem.margin.x + iteratorItem.margin.z);
-                    LayoutNumber itemMinSizeY = (LayoutNumber)(iteratorItem.finalRect.w + iteratorItem.margin.y + iteratorItem.margin.w);
+                    LayoutNumber itemMinSizeX = (LayoutNumber)(iterator.finalRect.z + iterator.margin.x + iterator.margin.z);
+                    LayoutNumber itemMinSizeY = (LayoutNumber)(iterator.finalRect.w + iterator.margin.y + iterator.margin.w);
                     size.y += itemMinSizeY;
                     if(itemMinSizeX > size.x)
                     {
                         size.x = itemMinSizeX;
                     }
-                    iterator = iteratorItem.nextSibling;
+                    iterator = iterator.nextSibling;
                 }
             }
         }
@@ -559,16 +499,15 @@ public class Layout
             //Wrap is really annoying because we really have NO IDEA how big this is going to be.
             // the size depends on how much space is available, so the parents 'minimum size' is completely pointless.
             // In an attempt to make it vaguely useful, the 'minimum' size is the largest elements.
-            ItemRef iterator = item.firstChild;
-            while(iterator != -1)
+            Item? iterator = item.firstChild;
+            while(iterator != null)
             {
-                Item iteratorItem = items[iterator];
                 //the item's "min size" is what's defined by the user of the library.
                 // the min size we need to use here is the calculated min size,
                 // which was conveniently written to the finalRect when the children were iterated.
                 // But, we also add the margin to that size, since the container also contains its childrens margins
-                LayoutNumber itemMinSizeX = (LayoutNumber)(iteratorItem.finalRect.z + iteratorItem.margin.x + iteratorItem.margin.z);
-                LayoutNumber itemMinSizeY = (LayoutNumber)(iteratorItem.finalRect.w + iteratorItem.margin.y + iteratorItem.margin.w);
+                LayoutNumber itemMinSizeX = (LayoutNumber)(iterator.finalRect.z + iterator.margin.x + iterator.margin.z);
+                LayoutNumber itemMinSizeY = (LayoutNumber)(iterator.finalRect.w + iterator.margin.y + iterator.margin.w);
                 if(itemMinSizeX > size.x)
                 {
                     size.x = itemMinSizeX;
@@ -577,37 +516,33 @@ public class Layout
                 {
                     size.y = itemMinSizeY;
                 }
-                iterator = iteratorItem.nextSibling;
+                iterator = iterator.nextSibling;
             }
         }
         //set the "final" rect output to be our final size
         // This will be used in the final determineSizes function later.
         item.finalRect = new LayoutVec4(0, 0, size.x, size.y);
-        items[itemRef] = item;
     }
 
-    void DetermineSizes(ItemRef itemRef, LayoutVec2 maxSize)
+    void DetermineSizes(Item item, LayoutVec2 maxSize)
     {
-        Item item = items[itemRef];
         //Figure out the children's sizes
         // The size depends on a lot of things, which is really annoying
         // However, for now it depends exclusively this fill value and the childs expand.
         // TODO: account for child maxSize, Wrap
 
-        ItemRef iterator = item.firstChild;
+        Item? child = item.firstChild;
         // Total our number of children
         int numberOfChildren = 0;
-        while(iterator != -1)
+        while(child != null)
         {
-            Item child = items[iterator];
-            iterator = child.nextSibling;
+            child = child.nextSibling;
             numberOfChildren++;
         }
-        iterator = item.firstChild;
+        child = item.firstChild;
         //For every child
-        while(iterator != -1)
+        while(child != null)
         {
-            Item child = items[iterator];
             LayoutVec2 childMarginTotal = new LayoutVec2(
                 (LayoutNumber)(child.margin.x + child.margin.z),
                 (LayoutNumber)(child.margin.y + child.margin.w)
@@ -665,16 +600,35 @@ public class Layout
             childSize.y = (LayoutNumber)(childSize.y - childMarginTotal.y);
             child.finalRect.z = childSize.x;
             child.finalRect.w = childSize.y;
-            items[iterator] = child;
-            DetermineSizes(iterator, childSize);
-            iterator = child.nextSibling;
+            DetermineSizes(child, childSize);
+            child = child.nextSibling;
         }
+    }
+
+    //Note: does not handle the case when allignment is zero.
+    LayoutNumber CalculateAllignmentOffset(Item item, uint stackDirection, uint allignment, uint wrap)
+    {
+        //First, figure out how wide our set of elements is going to be
+        LayoutNumber itemSize = item.finalRect[stackDirection+2];
+        //summate the sizes of the children in the stack direction
+        LayoutNumber sumOfChildSizes = TotalItemSizes(item.firstChild, stackDirection, out var outerMarginTotal);
+        if(wrap == 1)
+        {
+            sumOfChildSizes = LayoutNumber.Min(sumOfChildSizes, (LayoutNumber)(itemSize + outerMarginTotal));
+        }
+
+        
+        //If we are centering, then we need to do one last thing
+        if(allignment == 1)
+        {
+            itemSize/=2; sumOfChildSizes/=2;
+        }
+        return (LayoutNumber)(sumOfChildSizes - itemSize);
     }
     //like DetermineSizes, this determines the positions of the children of the item
     // given its position
-    void DeterminePositions(ItemRef itemRef, LayoutVec2 pos)
+    void DeterminePositions(Item item, LayoutVec2 pos)
     {
-        Item item = items[itemRef];
         //The is the second writing of this function.
         //First, use the allignment to figure out where to start placing the children
 
@@ -682,25 +636,18 @@ public class Layout
         LayoutVec2 placePos = pos;
         var stackDirection = item.flags.StackDirection;
         var allignment = item.flags.Allignment;
+        LayoutNumber allignmentOffset = 0;
         if(allignment != 0)
         {
-            //summate the sizes of the children in the stack direction
-            LayoutNumber sumOfChildSizes = TotalItemSizes(item.firstChild, stackDirection);
-            LayoutNumber itemSize = item.finalRect[stackDirection+2];
-            //If we are centering, then we need to do one last thing
-            if(allignment == 1)
-            {
-                itemSize/=2; sumOfChildSizes/=2;
-            }
-            placePos[stackDirection] += (LayoutNumber)(sumOfChildSizes - itemSize);
+            allignmentOffset = CalculateAllignmentOffset(item, stackDirection, allignment, item.flags.Wrap);
         }
+        placePos[stackDirection] += allignmentOffset;
         // Go through every child
-        var childRef = item.firstChild;
-        while(childRef != -1)
+        var child = item.firstChild;
+        while(child != null)
         {
             // the position of the child is already in placePos.
             // The loop actually determines the position of the next item.
-            Item child = items[childRef];
             LayoutVec2 childMarginTotal = new(
                 (LayoutNumber)(child.margin.x + child.margin.z),
                 (LayoutNumber)(child.margin.y + child.margin.w)
@@ -726,30 +673,44 @@ public class Layout
             }
             child.finalRect.x = childRealPos.x;
             child.finalRect.y = childRealPos.y;
-            items[childRef] = child;
-            DeterminePositions(childRef, childRealPos);
-            //determine the position of the next one
-            placePos[stackDirection] += (LayoutNumber)(child.finalRect[stackDirection+2] + childMarginTotal[stackDirection]);
-            // If it's going to go outside this container and wrap is enabled put it on the next line.
-            if(item.flags.Wrap == 1 && placePos[stackDirection] >= (item.finalRect[stackDirection + 2] - child.finalRect[stackDirection+2]))
+            DeterminePositions(child, childRealPos);
+            if(child.nextSibling != null)
             {
-                placePos[XOrYOther] += (LayoutNumber)(child.finalRect[ZOrWOther] + childMarginTotal[XOrYOther]);
-                placePos[stackDirection] = pos[stackDirection];
+                //determine the position of the next one
+                placePos[stackDirection] += (LayoutNumber)(child.finalRect[stackDirection+2] + childMarginTotal[stackDirection]);
+                var nextItem = child.nextSibling;
+                // If it's going to go outside this container and wrap is enabled put it on the next line.
+                if(item.flags.Wrap == 1 && placePos[stackDirection] > pos[stackDirection] + item.finalRect[stackDirection + 2] - nextItem.margin[stackDirection] - nextItem.margin[stackDirection+2] - nextItem.finalRect[stackDirection+2])
+                {
+                    placePos[XOrYOther] += (LayoutNumber)(child.finalRect[ZOrWOther] + childMarginTotal[XOrYOther]);
+                    placePos[stackDirection] = (LayoutNumber)(pos[stackDirection] + allignmentOffset);
+                }
             }
-            childRef = child.nextSibling;
+            child = child.nextSibling;
         }
     }
-    private LayoutNumber TotalItemSizes(ItemRef firstSibling, uint dimention)
+    private static LayoutNumber TotalItemSizes(Item? item, uint dimention, out LayoutNumber outerMarginTotal)
     {
-        LayoutNumber total = 0;
-        while(firstSibling != -1)
+        if(item == null)
         {
-            Item child = items[firstSibling];
-            total += child.finalRect[dimention+2];
+            outerMarginTotal = 0;
+            return 0;
+        }
+        //the begin of the first item's margin
+        outerMarginTotal = item.margin[dimention];
+        LayoutNumber total = 0;
+        while(item != null)
+        {
+            total += item.finalRect[dimention+2];
             //Don't forget the margins!
-            total +=  child.margin[dimention];
-            total += child.margin[dimention+2];
-            firstSibling = child.nextSibling;
+            total +=  item.margin[dimention];
+            total += item.margin[dimention+2];
+            if(item.nextSibling == null)
+            {
+                //plus the end of the last childs margin
+                outerMarginTotal += item.margin[dimention + 2];
+            }
+            item = item.nextSibling;
         }
         return total;
     }
