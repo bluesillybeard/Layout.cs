@@ -9,6 +9,9 @@
 // These are configurable to your liking.
 using LayoutNumber = System.Int16;
 using ItemRef = System.Int32;
+using System.Globalization;
+using System.Timers;
+using Microsoft.VisualBasic;
 
 public struct LayoutVec2
 {
@@ -18,6 +21,39 @@ public struct LayoutVec2
         this.y = y;
     }
     public LayoutNumber x, y;
+    //Why an indexer?
+    // since the X and Y coordinates are more or less the same,
+    // just on different axis,
+    // using a number that gets passed into a function
+    // to differentiate between the axis
+    // is a lot easier than having two different functions
+    public LayoutNumber this[uint i]
+    {
+        //0 -> horizontal
+        //1 -> vertical
+        get {
+            return i==0 ? x : y;
+        }
+        set
+        {
+            //Why don't I just use an array?
+            // Because C# has no struct-like arrays.
+            // And for performance, I want to follow as few references
+            // and allocate as few objects as possible.
+            // I suppose I could use an explicit packing order
+            // and then index from the address of the struct
+            // Like one may do in C, but that sounds pretty awful.
+            // The layout.h this was inspired from did use arrays, because C is capable of such insanity.
+            if(i==0)
+            {
+                x = value;
+            }
+            else
+            {
+                y = value;
+            }
+        }
+    }
 }
 
 public struct LayoutVec4
@@ -30,6 +66,41 @@ public struct LayoutVec4
         this.w = w;
     }
     public LayoutNumber x, y, z, w;
+
+    public LayoutNumber this[uint i]
+    {
+        //0=x, 1=y, 2=z, 3=w
+        get
+        {
+            switch(i)
+            {
+                case 0:
+                    return x;
+                case 1:
+                    return y;
+                case 2:
+                    return z;
+                //technically this means anythig >3 is w, but that shouldn't be a problem.
+                default:
+                    return w;
+            }
+        }
+        set
+        {
+            switch(i)
+            {
+                case 0:
+                    x = value; break;
+                case 1:
+                    y = value;break;
+                case 2:
+                    z = value;break;
+                //technically this means anythig >3 is w, but that shouldn't be a problem.
+                default:
+                    w = value;break;
+            }
+        }
+    }
 }
 
 public struct ItemFlags
@@ -177,7 +248,26 @@ public class Layout
             items.Add(new Item());
         }
         AddChild(parent, child);
-        Item item = new Item();
+        Item item = new();
+        item.flags.InTree = 1;
+        items[child] = item;
+        return child;
+    }
+
+    public ItemRef CreateChild(ItemRef parent, ItemFlags flags, LayoutVec2 minSize, LayoutVec4 margins)
+    {
+        if(!clearItems.TryPop(out ItemRef child))
+        {
+            child = (ItemRef)items.Count;
+            items.Add(new Item());
+        }
+        AddChild(parent, child);
+        Item item = new()
+        {
+            flags = flags,
+            minSize = minSize,
+            margin = margins,
+        };
         item.flags.InTree = 1;
         items[child] = item;
         return child;
@@ -467,7 +557,7 @@ public class Layout
         else
         {
             //Wrap is really annoying because we really have NO IDEA how big this is going to be.
-            // the size depends on how much space is available, so the 'minimum size' is completely pointless.
+            // the size depends on how much space is available, so the parents 'minimum size' is completely pointless.
             // In an attempt to make it vaguely useful, the 'minimum' size is the largest elements.
             ItemRef iterator = item.firstChild;
             while(iterator != -1)
@@ -582,85 +672,56 @@ public class Layout
     }
     //like DetermineSizes, this determines the positions of the children of the item
     // given its position
-    //TODO: allignment, wrap
     void DeterminePositions(ItemRef itemRef, LayoutVec2 pos)
     {
         Item item = items[itemRef];
-        ItemRef childRef = item.firstChild;
-        LayoutVec2 childPos = new LayoutVec2();
-        switch(item.flags.Allignment)
+        //The is the second writing of this function.
+        //First, use the allignment to figure out where to start placing the children
+
+        //If the allignment is begin, then don't waste time on deteremining an offset since it will just be zero.
+        LayoutVec2 placePos = pos;
+        var stackDirection = item.flags.StackDirection;
+        var allignment = item.flags.Allignment;
+        if(allignment != 0)
         {
-            case 1:
-                while(childRef != -1)
-                {
-                    Item child = items[childRef];
-                    childPos.x += (LayoutNumber)(child.finalRect.z + child.margin.x + child.margin.z);
-                    childPos.y += (LayoutNumber)(child.finalRect.w + child.margin.y + child.margin.w);
-                    childRef = child.nextSibling;
-                }
-                childPos.x = (LayoutNumber)(item.finalRect.z/2 - childPos.x/2);
-                childPos.y = (LayoutNumber)(item.finalRect.w/2 - childPos.y/2);
-                break;
-            //end
-            case 2:
-            while(childRef != -1)
-                {
-                    Item child = items[childRef];
-                    childPos.x += (LayoutNumber)(child.finalRect.z + child.margin.x + child.margin.z);
-                    childPos.y += (LayoutNumber)(child.finalRect.w + child.margin.y + child.margin.w);
-                    childRef = child.nextSibling;
-                }
-                childPos.x = (LayoutNumber)(item.finalRect.z - childPos.x);
-                childPos.y = (LayoutNumber)(item.finalRect.w - childPos.y);
-                break;
+            //summate the sizes of the children in the stack direction
+            LayoutNumber sumOfChildSizes = TotalItemSizes(item.firstChild, stackDirection);
+            LayoutNumber itemSize = item.finalRect[stackDirection+2];
+            //If we are centering, then we need to do one last thing
+            if(allignment == 1)
+            {
+                itemSize/=2; sumOfChildSizes/=2;
+            }
+            placePos[stackDirection] += (LayoutNumber)(sumOfChildSizes - itemSize);
         }
-        if(item.flags.StackDirection == 0)
-        {
-            childPos.y = 0;
-        }
-        else
-        {
-            childPos.x = 0;
-        }
-        childPos.x += pos.x;
-        childPos.y += pos.y;
-        childRef = item.firstChild;
+        // Go through every child
+        var childRef = item.firstChild;
         while(childRef != -1)
         {
+            // the position of the child is already in placePos.
+            // The loop actually determines the position of the next item.
             Item child = items[childRef];
-            LayoutVec2 childMarginTotal = new LayoutVec2(
+            LayoutVec2 childMarginTotal = new(
                 (LayoutNumber)(child.margin.x + child.margin.z),
                 (LayoutNumber)(child.margin.y + child.margin.w)
             );
             LayoutVec2 childRealPos;
-            childRealPos = new LayoutVec2(
-                (LayoutNumber)(childPos.x + child.margin.x),
-                (LayoutNumber)(childPos.y + child.margin.y)
+            childRealPos = new(
+                (LayoutNumber)(placePos.x + child.margin.x),
+                (LayoutNumber)(placePos.y + child.margin.y)
             );
             //set the child's position
+            var XOrYOther = 1 - stackDirection;
+            var ZOrWOther = 3 - stackDirection;
             switch(child.flags.PerpendicularAllignment)
             {
                 //center
                 case 1:
-                    if(item.flags.StackDirection == 0)
-                    {
-                        childRealPos.y = (LayoutNumber)(childPos.y + item.finalRect.w/2 - child.finalRect.w/2);
-                    }
-                    else
-                    {
-                        childRealPos.x = (LayoutNumber)(childPos.x + item.finalRect.z/2 - child.finalRect.z/2);
-                    }
+                    childRealPos[XOrYOther] = (LayoutNumber)(placePos[XOrYOther] + item.finalRect[ZOrWOther]/2 - child.finalRect[ZOrWOther]/2);
                     break;
                 //end
                 case 2:
-                    if(item.flags.StackDirection == 0)
-                    {
-                        childRealPos.y = (LayoutNumber)(childPos.y + item.finalRect.w - child.finalRect.w - child.margin.w);
-                    }
-                    else
-                    {
-                        childRealPos.x = (LayoutNumber)(childPos.x + item.finalRect.z - child.finalRect.z - child.margin.z);
-                    }
+                    childRealPos[XOrYOther] = (LayoutNumber)(placePos[XOrYOther] + item.finalRect[ZOrWOther] - child.finalRect[ZOrWOther] - child.margin[ZOrWOther]);
                     break;
             }
             child.finalRect.x = childRealPos.x;
@@ -668,18 +729,28 @@ public class Layout
             items[childRef] = child;
             DeterminePositions(childRef, childRealPos);
             //determine the position of the next one
-            if(item.flags.StackDirection == 0)
+            placePos[stackDirection] += (LayoutNumber)(child.finalRect[stackDirection+2] + childMarginTotal[stackDirection]);
+            // If it's going to go outside this container and wrap is enabled put it on the next line.
+            if(item.flags.Wrap == 1 && placePos[stackDirection] >= (item.finalRect[stackDirection + 2] - child.finalRect[stackDirection+2]))
             {
-                //horizontal
-                childPos.x += (LayoutNumber)(child.finalRect.z + childMarginTotal.x);
-            }
-            else
-            {
-                //vertical
-                childPos.y += (LayoutNumber)(child.finalRect.w + childMarginTotal.y);
+                placePos[XOrYOther] += (LayoutNumber)(child.finalRect[ZOrWOther] + childMarginTotal[XOrYOther]);
+                placePos[stackDirection] = pos[stackDirection];
             }
             childRef = child.nextSibling;
         }
-
+    }
+    private LayoutNumber TotalItemSizes(ItemRef firstSibling, uint dimention)
+    {
+        LayoutNumber total = 0;
+        while(firstSibling != -1)
+        {
+            Item child = items[firstSibling];
+            total += child.finalRect[dimention+2];
+            //Don't forget the margins!
+            total +=  child.margin[dimention];
+            total += child.margin[dimention+2];
+            firstSibling = child.nextSibling;
+        }
+        return total;
     }
 }

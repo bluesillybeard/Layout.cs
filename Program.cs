@@ -7,6 +7,8 @@ public static class Program
     static readonly LayoutVec4 margin = new LayoutVec4(10, 7, 4, 1);
     public static void Main()
     {
+        //Not sure if this is a problem with GNOME (my Desktop Environment),
+        // X11 (Windowing system), or Raylib, but using VSync makes resizing the window extremely laggy
         Raylib.SetConfigFlags(ConfigFlags.FLAG_WINDOW_RESIZABLE);
         Raylib.SetTargetFPS(60);
         Raylib.InitWindow(800, 600, "testing Layout");
@@ -80,10 +82,26 @@ public static class Program
         l.SetItemMargin(secondChildOfTheFirstChildOfTheRootNode, margin);
         // ok these names are getting rediculous, so I made a better notation
         //first child of the second child of the root node
+        flags.Wrap = 1;
+        flags.Fill = 0;
         ItemRef child_2_1 = l.CreateChild(secondChildOfTheRootNode);
         l.SetItemFlags(child_2_1, flags);
         l.SetItemMinSize(child_2_1, size);
         l.SetItemMargin(child_2_1, margin);
+        // a bunch of items to test wrapping
+        {
+            flags.Expand = 0;
+            l.CreateChild(child_2_1, flags, size, margin);
+            l.CreateChild(child_2_1, flags, size, margin);
+            l.CreateChild(child_2_1, flags, size, margin);
+            l.CreateChild(child_2_1, flags, size, margin);
+            l.CreateChild(child_2_1, flags, size, margin);
+            l.CreateChild(child_2_1, flags, size, margin);
+            l.CreateChild(child_2_1, flags, size, margin);
+            l.CreateChild(child_2_1, flags, size, margin);
+            flags.Expand = 1;
+        }
+        flags.Wrap = 0;
         //second child of the second child of the root node
         ItemRef child_2_2 = l.CreateSibling(child_2_1);
         l.SetItemFlags(child_2_2, flags);
